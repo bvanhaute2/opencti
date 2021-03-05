@@ -446,6 +446,52 @@ type FileConnection {
 }
 ###### ENTITIES
 
+############## Task
+enum TaskType {
+  QUERY
+  LIST
+}
+type TaskError {
+  timestamp: DateTime
+  message: String
+}
+enum TaskDefinitionType {
+  DELETE
+  ADD
+  REMOVE
+  REPLACE
+}
+type TaskDefinition {
+  type: TaskDefinitionType
+  data: String
+}
+type Task {
+  id: ID!
+  type: TaskType
+  initiator: User
+  definition: TaskDefinition
+  created_at: DateTime
+  task_expected_number: Int,
+  task_processed_number: Int,
+  errors: [TaskError]
+}
+input TaskDefinitionInput {
+  # For relations
+  relation_type: String
+  targets_ids: [ID!]
+}
+input ListTaskAddInput {
+  ids: [ID!]
+  type: TaskDefinitionType
+  definition: TaskDefinitionInput
+}
+input QueryTaskAddInput {
+  filters: String!
+  type: TaskDefinitionType
+  definition: TaskDefinitionInput
+}
+###### Task
+
 interface BasicObject {
   id: ID! # internal_id
   standard_id: String!
@@ -7372,6 +7418,7 @@ type Query {
     orderMode: OrderingMode
     search: String
   ): TaxiiCollectionConnection @auth(for: [TAXIIAPI_SETCOLLECTIONS])
+  tasks: [Task] @auth(for: [KNOWLEDGE])
 
   ######## STIX OBJECT ENTITIES
 
@@ -8445,6 +8492,11 @@ type Mutation {
   workAdd(connectorId: String!, friendlyName: String): Work!
     @auth(for: [KNOWLEDGE_KNASKIMPORT, KNOWLEDGE_KNGETEXPORT_KNASKEXPORT])
   workEdit(id: ID!): WorkEditMutations @auth(for: [KNOWLEDGE_KNASKIMPORT, KNOWLEDGE_KNGETEXPORT_KNASKEXPORT])
+
+  ### TASK
+  taskCancel(id: ID!): ID! @auth(for: [KNOWLEDGE_KNUPDATE])
+  listTaskAdd(input: ListTaskAddInput): Task! @auth(for: [KNOWLEDGE_KNUPDATE])
+  queryTaskAdd(input: QueryTaskAddInput): Task! @auth(for: [KNOWLEDGE_KNUPDATE])
 
   ######## INTERNAL OBJECT ENTITIES
   token(input: UserLoginInput): String

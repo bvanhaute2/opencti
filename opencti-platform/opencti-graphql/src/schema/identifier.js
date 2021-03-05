@@ -293,6 +293,7 @@ const generateStixId = (type, data) => {
 
 export const generateInternalId = () => uuidv4();
 export const generateWorkId = () => `opencti-work--${generateInternalId()}`;
+export const generateTaskId = () => `opencti-task--${generateInternalId()}`;
 export const generateStandardId = (type, data) => {
   // Entities
   if (isStixMetaObject(type)) return generateStixId(type, data);

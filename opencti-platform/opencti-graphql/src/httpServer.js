@@ -5,11 +5,13 @@ import createApp from './app';
 import createApolloServer from './graphql/graphql';
 import { initBroadcaster } from './graphql/sseMiddleware';
 import initExpiredManager from './manager/expiredManager';
+import initTaskManager from './manager/taskManager';
 
 const PORT = conf.get('app:port');
 const REQ_TIMEOUT = conf.get('app:request_timeout');
 const broadcaster = initBroadcaster();
 const expiredManager = initExpiredManager();
+const taskManager = initTaskManager();
 const createHttpServer = async () => {
   const apolloServer = createApolloServer();
   const { app, seeMiddleware } = await createApp(apolloServer, broadcaster);
@@ -18,6 +20,7 @@ const createHttpServer = async () => {
   apolloServer.installSubscriptionHandlers(httpServer);
   await broadcaster.start();
   await expiredManager.start();
+  await taskManager.start();
   return { httpServer, seeMiddleware };
 };
 
@@ -29,6 +32,7 @@ export const listenServer = async () => {
         httpServer.on('close', () => {
           if (seeMiddleware) seeMiddleware.shutdown();
           expiredManager.shutdown();
+          taskManager.shutdown();
         });
         httpServer.listen(PORT, () => {
           logger.info(`[OPENCTI] Servers ready on port ${PORT}`);
@@ -55,6 +59,7 @@ export const restartServer = async (httpServer) => {
 export const stopServer = async (httpServer) => {
   await broadcaster.shutdown();
   await expiredManager.shutdown();
+  await taskManager.shutdown();
   return new Promise((resolve) => {
     httpServer.close(() => {
       resolve();

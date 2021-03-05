@@ -30,6 +30,9 @@
     "lock_key": "expired_manager_lock",
     "interval": 300000
   },
+  "task_scheduler": {
+    "interval": 1000
+  },
   "redis": {
     "hostname": "localhost",
     "port": 6379

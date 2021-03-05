@@ -24,6 +24,7 @@ import { now } from '../utils/format';
 
 const BASE_DATABASE = 0; // works key for tracking / stream
 const CONTEXT_DATABASE = 1; // locks / user context
+const TASK_DATABASE = 2; // locks / user context
 const OPENCTI_STREAM = 'stream.opencti';
 const REDIS_EXPIRE_TIME = 90;
 const redisOptions = (database) => ({
@@ -51,9 +52,11 @@ const createRedisClient = async (database = BASE_DATABASE) => {
 
 let clientBase = null;
 let clientContext = null;
+let clientTask = null;
 export const redisInitializeClients = async () => {
   clientBase = await createRedisClient(BASE_DATABASE);
   clientContext = await createRedisClient(CONTEXT_DATABASE);
+  clientTask = await createRedisClient(TASK_DATABASE);
 };
 
 export const redisIsAlive = async () => {
@@ -74,16 +77,16 @@ export const notify = (topic, instance, user, context) => {
 };
 
 // region user context (clientContext)
-const contextFetchMatch = async (match) => {
+const redisFetchMatch = async (client, match, isHset = false) => {
   return new Promise((resolve, reject) => {
     const elementsPromise = [];
-    const stream = clientContext.scanStream({
+    const stream = client.scanStream({
       match,
       count: 100,
     });
     stream.on('data', (resultKeys) => {
       for (let i = 0; i < resultKeys.length; i += 1) {
-        elementsPromise.push(clientContext.get(resultKeys[i]));
+        elementsPromise.push(client.call(isHset ? 'HGETALL' : 'GET', resultKeys[i]));
       }
     });
     stream.on('error', (error) => {
@@ -92,7 +95,7 @@ const contextFetchMatch = async (match) => {
     });
     stream.on('end', () => {
       Promise.all(elementsPromise).then((data) => {
-        const elements = R.map((d) => JSON.parse(d), data);
+        const elements = R.map((d) => (isHset ? R.fromPairs(R.splitEvery(2, d)) : JSON.parse(d)), data);
         resolve(elements);
       });
     });
@@ -108,7 +111,7 @@ export const setEditContext = async (user, instanceId, input) => {
   );
 };
 export const fetchEditContext = async (instanceId) => {
-  return contextFetchMatch(`edit:${instanceId}:*`);
+  return redisFetchMatch(clientContext, `edit:${instanceId}:*`);
 };
 export const delEditContext = async (user, instanceId) => {
   return clientContext.del(`edit:${instanceId}:${user.id}`);
@@ -182,7 +185,7 @@ export const redisAddDeletions = async (internalIds) => {
   });
 };
 export const redisFetchLatestDeletions = async () => {
-  const keys = await contextFetchMatch('deletion-*');
+  const keys = await redisFetchMatch(clientContext, 'deletion-*');
   return R.uniq(R.flatten(keys));
 };
 // endregion
@@ -523,5 +526,27 @@ export const redisUpdateActionExpectation = async (user, workId, expectation) =>
     await updateObjectCounterRaw(tx, workId, 'import_expected_number', expectation);
   });
   return workId;
+};
+// endregion
+
+// region task handling
+export const redisDeleteTask = async (internalIds) => {
+  const ids = Array.isArray(internalIds) ? internalIds : [internalIds];
+  return redisTx(clientTask, (tx) => {
+    tx.call('DEL', ...ids);
+  });
+};
+export const redisGetTask = async (internalId) => {
+  const rawElement = await clientTask.call('HGETALL', internalId);
+  return R.fromPairs(R.splitEvery(2, rawElement));
+};
+export const redisCreateTask = async (element) => {
+  return redisTx(clientTask, (tx) => {
+    const data = R.flatten(R.toPairs(element));
+    tx.call('HSET', element.id, data);
+  });
+};
+export const redisFetchTasks = async () => {
+  return redisFetchMatch(clientTask, 'opencti-task--*', true);
 };
 // endregion
